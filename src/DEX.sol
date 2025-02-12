@@ -54,4 +54,35 @@ contract DEX is ReentrancyGuard {
         token0 = _token0;
         token1 = _token1;
     }
+
+    // Add liquidity within a price range
+    function addLiquidity(
+        uint256 amount0Desired,
+        uint256 amount1Desired,
+        int24 lowerTick,
+        int24 upperTick
+    ) external nonReentrant {
+        require(amount0Desired > 0 && amount1Desired > 0, "Amounts must be greater than 0");
+        require(lowerTick < upperTick, "Invalid tick range");
+
+        // Transfer tokens from the user
+        IERC20(token0).transferFrom(msg.sender, address(this), amount0Desired);
+        IERC20(token1).transferFrom(msg.sender, address(this), amount1Desired);
+
+        // Calculate liquidity (simplified for demonstration)
+        uint128 liquidity = uint128(Math.min(amount0Desired, amount1Desired));
+
+        // Update pool state
+        pool.liquidity += liquidity;
+        pool.tickLiquidity[lowerTick] += liquidity;
+        pool.tickLiquidity[upperTick] += liquidity;
+
+        // Update user position
+        Position storage position = pool.positions[msg.sender];
+        position.liquidity += liquidity;
+        position.lowerTick = lowerTick;
+        position.upperTick = upperTick;
+
+        emit LiquidityAdded(msg.sender, amount0Desired, amount1Desired, liquidity, lowerTick, upperTick);
+    }
 }

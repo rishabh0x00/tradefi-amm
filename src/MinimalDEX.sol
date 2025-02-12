@@ -185,8 +185,9 @@ contract MinimalDEX is ReentrancyGuard {
         Pool storage poolOut = pools[tokenOut];
         require(poolIn.totalSupply > 0 && poolOut.totalSupply > 0, "Pool does not exist");
 
+        uint256 tokenBalanceBefore = IERC20(tokenIn).balanceOf(address(this));
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
-        uint256 actualTokenInAmount = IERC20(tokenIn).balanceOf(address(this)); // Single balance check
+        uint256 actualTokenInAmount = IERC20(tokenIn).balanceOf(address(this)) - tokenBalanceBefore;
 
         uint256 feeIn = (actualTokenInAmount * 3) / 1000;
         uint256 tokenInAmountLessFee = actualTokenInAmount - feeIn;

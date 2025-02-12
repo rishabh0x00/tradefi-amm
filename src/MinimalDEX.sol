@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import "openzeppelin-contracts/utils/ReentrancyGuard.sol";
+import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract MinimalDEX {
+contract MinimalDEX is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     struct Pool {
         uint256 ethReserve;
         uint256 tokenReserve;
@@ -44,7 +48,11 @@ contract MinimalDEX {
         uint256 amountOut
     );
 
-    function addLiquidity(address token, uint256 tokenAmount) external payable {
+    function addLiquidity(address token, uint256 tokenAmount) 
+        external 
+        payable 
+        nonReentrant 
+    {
         require(msg.value > 0, "Must send ETH");
         require(tokenAmount > 0, "Must send tokens");
 
@@ -52,7 +60,7 @@ contract MinimalDEX {
         uint256 ethAmount = msg.value;
 
         uint256 tokenBalanceBefore = IERC20(token).balanceOf(address(this));
-        IERC20(token).transferFrom(msg.sender, address(this), tokenAmount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), tokenAmount);
         uint256 tokenBalanceAfter = IERC20(token).balanceOf(address(this));
         uint256 actualTokenAmount = tokenBalanceAfter - tokenBalanceBefore;
 
@@ -72,7 +80,8 @@ contract MinimalDEX {
             require(ethAmount >= requiredEth, "Insufficient ETH sent");
             
             if (ethAmount > requiredEth) {
-                payable(msg.sender).transfer(ethAmount - requiredEth);
+                (bool success, ) = payable(msg.sender).call{value: ethAmount - requiredEth}("");
+                require(success, "ETH transfer failed");
             }
 
             uint256 liquidity = (actualTokenAmount * pool.totalSupply) / tokenReserve;
@@ -87,7 +96,10 @@ contract MinimalDEX {
         emit LiquidityAdded(msg.sender, token, ethAmount, actualTokenAmount, liquidityBalances[msg.sender][token]);
     }
 
-    function removeLiquidity(address token, uint256 liquidity) external {
+    function removeLiquidity(address token, uint256 liquidity) 
+        external 
+        nonReentrant 
+    {
         Pool storage pool = pools[token];
         require(liquidityBalances[msg.sender][token] >= liquidity, "Insufficient liquidity");
 
@@ -102,13 +114,18 @@ contract MinimalDEX {
         pool.ethReserve -= ethAmount;
         pool.tokenReserve -= tokenAmount;
 
-        payable(msg.sender).transfer(ethAmount);
-        IERC20(token).transfer(msg.sender, tokenAmount);
+        (bool success, ) = payable(msg.sender).call{value: ethAmount}("");
+        require(success, "ETH transfer failed");
+        IERC20(token).safeTransfer(msg.sender, tokenAmount);
 
         emit LiquidityRemoved(msg.sender, token, ethAmount, tokenAmount, liquidity);
     }
 
-    function swapEthForToken(address token, uint256 minTokens) external payable {
+    function swapEthForToken(address token, uint256 minTokens) 
+        external 
+        payable 
+        nonReentrant 
+    {
         require(msg.value > 0, "Must send ETH");
         Pool storage pool = pools[token];
         require(pool.totalSupply > 0, "Pool does not exist");
@@ -124,17 +141,20 @@ contract MinimalDEX {
         pool.ethReserve += msg.value;
         pool.tokenReserve -= tokensOut;
 
-        IERC20(token).transfer(msg.sender, tokensOut);
+        IERC20(token).safeTransfer(msg.sender, tokensOut);
 
         emit Swapped(msg.sender, token, msg.value, tokensOut);
     }
 
-    function swapTokenForEth(address token, uint256 tokenAmount, uint256 minEth) external {
+    function swapTokenForEth(address token, uint256 tokenAmount, uint256 minEth) 
+        external 
+        nonReentrant 
+    {
         Pool storage pool = pools[token];
         require(pool.totalSupply > 0, "Pool does not exist");
 
         uint256 tokenBalanceBefore = IERC20(token).balanceOf(address(this));
-        IERC20(token).transferFrom(msg.sender, address(this), tokenAmount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), tokenAmount);
         uint256 tokenBalanceAfter = IERC20(token).balanceOf(address(this));
         uint256 actualTokenAmount = tokenBalanceAfter - tokenBalanceBefore;
 
@@ -147,7 +167,8 @@ contract MinimalDEX {
         pool.tokenReserve += actualTokenAmount;
         pool.ethReserve -= ethOut;
 
-        payable(msg.sender).transfer(ethOut);
+        (bool success, ) = payable(msg.sender).call{value: ethOut}("");
+        require(success, "ETH transfer failed");
 
         emit Swapped(msg.sender, token, actualTokenAmount, ethOut);
     }
@@ -157,44 +178,34 @@ contract MinimalDEX {
         address tokenOut,
         uint256 amountIn,
         uint256 minAmountOut
-    ) external {
+    ) external nonReentrant {
         require(tokenIn != tokenOut, "Same token");
+
         Pool storage poolIn = pools[tokenIn];
         Pool storage poolOut = pools[tokenOut];
         require(poolIn.totalSupply > 0 && poolOut.totalSupply > 0, "Pool does not exist");
 
-        // Swap tokenIn to ETH
-        uint256 tokenBalanceBefore = IERC20(tokenIn).balanceOf(address(this));
-        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
-        uint256 tokenBalanceAfter = IERC20(tokenIn).balanceOf(address(this));
-        uint256 actualTokenInAmount = tokenBalanceAfter - tokenBalanceBefore;
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        uint256 actualTokenInAmount = IERC20(tokenIn).balanceOf(address(this)); // Single balance check
 
         uint256 feeIn = (actualTokenInAmount * 3) / 1000;
         uint256 tokenInAmountLessFee = actualTokenInAmount - feeIn;
 
-        uint256 ethAmount = (tokenInAmountLessFee * poolIn.ethReserve) / 
-            (poolIn.tokenReserve + tokenInAmountLessFee);
-
+        uint256 ethAmount = (tokenInAmountLessFee * poolIn.ethReserve) / (poolIn.tokenReserve + tokenInAmountLessFee);
         poolIn.tokenReserve += actualTokenInAmount;
         poolIn.ethReserve -= ethAmount;
 
-        // Swap ETH to tokenOut
-        uint256 feeEth = (ethAmount * 3) / 1000;
-        uint256 ethAmountLessFee = ethAmount - feeEth;
-
-        uint256 tokenOutAmount = (ethAmountLessFee * poolOut.tokenReserve) / 
-            (poolOut.ethReserve + ethAmountLessFee);
+        uint256 tokenOutAmount = ((ethAmount * (1000 - 3)) / 1000 * poolOut.tokenReserve) / (poolOut.ethReserve + ((ethAmount * (1000 - 3)) / 1000));
 
         require(tokenOutAmount >= minAmountOut, "Insufficient output amount");
 
         poolOut.ethReserve += ethAmount;
         poolOut.tokenReserve -= tokenOutAmount;
 
-        IERC20(tokenOut).transfer(msg.sender, tokenOutAmount);
+        IERC20(tokenOut).safeTransfer(msg.sender, tokenOutAmount);
 
         emit TokenSwapped(msg.sender, tokenIn, tokenOut, actualTokenInAmount, tokenOutAmount);
     }
-
     function sqrt(uint256 y) internal pure returns (uint256 z) {
         if (y > 3) {
             z = y;

@@ -110,4 +110,49 @@ contract DEX is ReentrancyGuard {
 
         emit LiquidityRemoved(msg.sender, amount0, amount1, position.liquidity, lowerTick, upperTick);
     }
+
+    // Swap tokens using the constant product formula and concentrated liquidity
+    function swap(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address tokenIn,
+        address tokenOut
+    ) external nonReentrant {
+        require(amountIn > 0, "Amount must be greater than 0");
+        require(tokenIn == token0 || tokenIn == token1, "Invalid tokenIn");
+        require(tokenOut == token0 || tokenOut == token1, "Invalid tokenOut");
+        require(tokenIn != tokenOut, "Tokens must be different");
+
+        // Transfer tokens from the user
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
+
+        // Calculate swap amount using the constant product formula
+        uint256 amountOut;
+        if (tokenIn == token0) {
+            amountOut = getAmountOut(amountIn, pool.tickLiquidity[getCurrentTick()], pool.tickLiquidity[getCurrentTick() + 1]);
+            require(amountOut >= amountOutMin, "Insufficient output amount");
+
+            // Update reserves (simplified for demonstration)
+            pool.tickLiquidity[getCurrentTick()] += uint128(amountIn);
+            pool.tickLiquidity[getCurrentTick() + 1] -= uint128(amountOut);
+        } else {
+            amountOut = getAmountOut(amountIn, pool.tickLiquidity[getCurrentTick()], pool.tickLiquidity[getCurrentTick() - 1]);
+            require(amountOut >= amountOutMin, "Insufficient output amount");
+
+            // Update reserves (simplified for demonstration)
+            pool.tickLiquidity[getCurrentTick()] += uint128(amountIn);
+            pool.tickLiquidity[getCurrentTick() - 1] -= uint128(amountOut);
+        }
+
+        // Handle deflationary tokens
+        uint256 balanceBefore = IERC20(tokenOut).balanceOf(address(this));
+        IERC20(tokenOut).transfer(msg.sender, amountOut);
+        uint256 balanceAfter = IERC20(tokenOut).balanceOf(address(this));
+        require(balanceAfter >= balanceBefore - amountOut, "Deflationary token detected");
+
+        // Distribute fees
+        _updateFees(amountIn, amountOut);
+
+        emit Swap(msg.sender, amountIn, amountOut, tokenIn, tokenOut);
+    }
 }

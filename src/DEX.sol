@@ -155,4 +155,22 @@ contract DEX is ReentrancyGuard {
 
         emit Swap(msg.sender, amountIn, amountOut, tokenIn, tokenOut);
     }
+
+    // Calculate the amount of output tokens using the constant product formula
+    function getAmountOut(
+        uint256 amountIn,
+        uint128 liquidityLower,
+        uint128 liquidityUpper
+    ) internal pure returns (uint256) {
+        require(amountIn > 0, "AmountIn must be greater than 0");
+        require(liquidityLower > 0 && liquidityUpper > 0, "Liquidity must be greater than 0");
+
+        // Calculate amountOut with fee
+        uint256 amountInWithFee = amountIn * (10000 - fee);
+        uint256 numerator = amountInWithFee * uint256(liquidityUpper);
+        uint256 denominator = (uint256(liquidityLower) * 10000 + amountInWithFee);
+        uint256 amountOut = numerator / denominator;
+
+        return amountOut;
+    }
 }

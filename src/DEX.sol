@@ -179,6 +179,11 @@ contract DEX is ReentrancyGuard {
         return int24(uint24(pool.sqrtPriceX96 >> 96));
     }
 
+    function getLiquidity(address lp) external view returns (uint128 liquidity) {
+        Position storage position = pool.positions[lp];
+        liquidity = position.liquidity;
+    }
+
     // Distribute fees to liquidity providers
     function _updateFees(uint256 amountIn, uint256 amountOut) internal {
         uint256 feeAmount0 = (amountIn * fee) / 10000;

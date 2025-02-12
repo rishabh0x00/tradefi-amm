@@ -85,4 +85,29 @@ contract DEX is ReentrancyGuard {
 
         emit LiquidityAdded(msg.sender, amount0Desired, amount1Desired, liquidity, lowerTick, upperTick);
     }
+
+    // Remove liquidity
+    function removeLiquidity(int24 lowerTick, int24 upperTick) external nonReentrant {
+        Position storage position = pool.positions[msg.sender];
+        require(position.liquidity > 0, "No liquidity to remove");
+        require(position.lowerTick == lowerTick && position.upperTick == upperTick, "Invalid tick range");
+
+        // Calculate amounts to return (simplified for demonstration)
+        uint256 amount0 = (position.liquidity * uint256(uint128(pool.tickLiquidity[lowerTick]))) / pool.liquidity;
+        uint256 amount1 = (position.liquidity * uint256(uint128(pool.tickLiquidity[upperTick]))) / pool.liquidity;
+
+        // Update pool state
+        pool.liquidity -= position.liquidity;
+        pool.tickLiquidity[lowerTick] -= position.liquidity;
+        pool.tickLiquidity[upperTick] -= position.liquidity;
+
+        // Update user position
+        position.liquidity = 0;
+
+        // Transfer tokens back to the user
+        IERC20(token0).transfer(msg.sender, amount0);
+        IERC20(token1).transfer(msg.sender, amount1);
+
+        emit LiquidityRemoved(msg.sender, amount0, amount1, position.liquidity, lowerTick, upperTick);
+    }
 }

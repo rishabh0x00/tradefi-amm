@@ -10,8 +10,6 @@ contract DEX is ReentrancyGuard {
         uint128 liquidity; // Liquidity provided by the LP
         int24 lowerTick;   // Lower tick of the price range
         int24 upperTick;   // Upper tick of the price range
-        uint256 feeGrowthInside0Last; // Fee growth for token0 at the time of last update
-        uint256 feeGrowthInside1Last; // Fee growth for token1 at the time of last update
     }
 
     struct Pool {
@@ -60,7 +58,8 @@ contract DEX is ReentrancyGuard {
         uint256 amount0Desired,
         uint256 amount1Desired,
         int24 lowerTick,
-        int24 upperTick
+        int24 upperTick,
+        uint160 sqrtPriceX96
     ) external nonReentrant {
         require(amount0Desired > 0 && amount1Desired > 0, "Amounts must be greater than 0");
         require(lowerTick < upperTick, "Invalid tick range");
@@ -73,6 +72,7 @@ contract DEX is ReentrancyGuard {
         uint128 liquidity = uint128(Math.min(amount0Desired, amount1Desired));
 
         // Update pool state
+        pool.sqrtPriceX96 = sqrtPriceX96;
         pool.liquidity += liquidity;
         pool.tickLiquidity[lowerTick] += liquidity;
         pool.tickLiquidity[upperTick] += liquidity;
@@ -132,6 +132,7 @@ contract DEX is ReentrancyGuard {
             amountOut = getAmountOut(amountIn, pool.tickLiquidity[getCurrentTick()], pool.tickLiquidity[getCurrentTick() + 1]);
             require(amountOut >= amountOutMin, "Insufficient output amount");
 
+            pool.sqrtPriceX96 = uint160((pool.sqrtPriceX96 * amountOut) / amountIn);
             // Update reserves (simplified for demonstration)
             pool.tickLiquidity[getCurrentTick()] += uint128(amountIn);
             pool.tickLiquidity[getCurrentTick() + 1] -= uint128(amountOut);
@@ -139,6 +140,7 @@ contract DEX is ReentrancyGuard {
             amountOut = getAmountOut(amountIn, pool.tickLiquidity[getCurrentTick()], pool.tickLiquidity[getCurrentTick() - 1]);
             require(amountOut >= amountOutMin, "Insufficient output amount");
 
+            pool.sqrtPriceX96 = uint160((pool.sqrtPriceX96 * amountIn) / amountOut);
             // Update reserves (simplified for demonstration)
             pool.tickLiquidity[getCurrentTick()] += uint128(amountIn);
             pool.tickLiquidity[getCurrentTick() - 1] -= uint128(amountOut);

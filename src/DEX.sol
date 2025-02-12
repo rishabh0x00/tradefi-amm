@@ -173,4 +173,9 @@ contract DEX is ReentrancyGuard {
 
         return amountOut;
     }
+
+    // Get the current tick (simplified for demonstration)
+    function getCurrentTick() internal view returns (int24) {
+        return int24(uint24(pool.sqrtPriceX96 >> 96));
+    }
 }

@@ -178,4 +178,15 @@ contract DEX is ReentrancyGuard {
     function getCurrentTick() internal view returns (int24) {
         return int24(uint24(pool.sqrtPriceX96 >> 96));
     }
+
+    // Distribute fees to liquidity providers
+    function _updateFees(uint256 amountIn, uint256 amountOut) internal {
+        uint256 feeAmount0 = (amountIn * fee) / 10000;
+        uint256 feeAmount1 = (amountOut * fee) / 10000;
+
+        // Distribute fees to LPs based on their liquidity share
+        // (Simplified for demonstration)
+        pool.tickLiquidity[getCurrentTick()] += uint128(feeAmount0);
+        pool.tickLiquidity[getCurrentTick()] += uint128(feeAmount1);
+    }
 }

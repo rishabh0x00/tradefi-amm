@@ -48,11 +48,10 @@ contract MinimalDEX is ReentrancyGuard {
         uint256 amountOut
     );
 
-    function addLiquidity(address token, uint256 tokenAmount) 
-        external 
-        payable 
-        nonReentrant 
-    {
+    function addLiquidity(
+        address token,
+        uint256 tokenAmount
+    ) external payable nonReentrant {
         require(msg.value > 0, "Must send ETH");
         require(tokenAmount > 0, "Must send tokens");
 
@@ -66,8 +65,6 @@ contract MinimalDEX is ReentrancyGuard {
 
         if (pool.totalSupply == 0) {
             uint256 liquidity = sqrt(ethAmount * actualTokenAmount);
-            require(liquidity > 0, "Insufficient initial liquidity");
-            
             pool.ethReserve = ethAmount;
             pool.tokenReserve = actualTokenAmount;
             pool.totalSupply = liquidity;
@@ -75,16 +72,20 @@ contract MinimalDEX is ReentrancyGuard {
         } else {
             uint256 ethReserve = pool.ethReserve;
             uint256 tokenReserve = pool.tokenReserve;
-            
-            uint256 requiredEth = (actualTokenAmount * ethReserve) / tokenReserve;
+
+            uint256 requiredEth = (actualTokenAmount * ethReserve) /
+                tokenReserve;
             require(ethAmount >= requiredEth, "Insufficient ETH sent");
-            
+
             if (ethAmount > requiredEth) {
-                (bool success, ) = payable(msg.sender).call{value: ethAmount - requiredEth}("");
+                (bool success, ) = payable(msg.sender).call{
+                    value: ethAmount - requiredEth
+                }("");
                 require(success, "ETH transfer failed");
             }
 
-            uint256 liquidity = (actualTokenAmount * pool.totalSupply) / tokenReserve;
+            uint256 liquidity = (actualTokenAmount * pool.totalSupply) /
+                tokenReserve;
             require(liquidity > 0, "Insufficient liquidity minted");
 
             pool.ethReserve += requiredEth;
@@ -93,15 +94,24 @@ contract MinimalDEX is ReentrancyGuard {
             liquidityBalances[msg.sender][token] += liquidity;
         }
 
-        emit LiquidityAdded(msg.sender, token, ethAmount, actualTokenAmount, liquidityBalances[msg.sender][token]);
+        emit LiquidityAdded(
+            msg.sender,
+            token,
+            ethAmount,
+            actualTokenAmount,
+            liquidityBalances[msg.sender][token]
+        );
     }
 
-    function removeLiquidity(address token, uint256 liquidity) 
-        external 
-        nonReentrant 
-    {
+    function removeLiquidity(
+        address token,
+        uint256 liquidity
+    ) external nonReentrant {
         Pool storage pool = pools[token];
-        require(liquidityBalances[msg.sender][token] >= liquidity, "Insufficient liquidity");
+        require(
+            liquidityBalances[msg.sender][token] >= liquidity,
+            "Insufficient liquidity"
+        );
 
         uint256 totalSupply = pool.totalSupply;
         uint256 ethAmount = (liquidity * pool.ethReserve) / totalSupply;
@@ -118,14 +128,19 @@ contract MinimalDEX is ReentrancyGuard {
         require(success, "ETH transfer failed");
         IERC20(token).safeTransfer(msg.sender, tokenAmount);
 
-        emit LiquidityRemoved(msg.sender, token, ethAmount, tokenAmount, liquidity);
+        emit LiquidityRemoved(
+            msg.sender,
+            token,
+            ethAmount,
+            tokenAmount,
+            liquidity
+        );
     }
 
-    function swapEthForToken(address token, uint256 minTokens) 
-        external 
-        payable 
-        nonReentrant 
-    {
+    function swapEthForToken(
+        address token,
+        uint256 minTokens
+    ) external payable nonReentrant {
         require(msg.value > 0, "Must send ETH");
         Pool storage pool = pools[token];
         require(pool.totalSupply > 0, "Pool does not exist");
@@ -134,7 +149,8 @@ contract MinimalDEX is ReentrancyGuard {
         uint256 ethAmountLessFee = msg.value - fee;
 
         uint256 tokenReserve = pool.tokenReserve;
-        uint256 tokensOut = (ethAmountLessFee * tokenReserve) / (pool.ethReserve + ethAmountLessFee);
+        uint256 tokensOut = (ethAmountLessFee * tokenReserve) /
+            (pool.ethReserve + ethAmountLessFee);
 
         require(tokensOut >= minTokens, "Insufficient output amount");
 
@@ -146,10 +162,11 @@ contract MinimalDEX is ReentrancyGuard {
         emit Swapped(msg.sender, token, msg.value, tokensOut);
     }
 
-    function swapTokenForEth(address token, uint256 tokenAmount, uint256 minEth) 
-        external 
-        nonReentrant 
-    {
+    function swapTokenForEth(
+        address token,
+        uint256 tokenAmount,
+        uint256 minEth
+    ) external nonReentrant {
         Pool storage pool = pools[token];
         require(pool.totalSupply > 0, "Pool does not exist");
 
@@ -161,7 +178,8 @@ contract MinimalDEX is ReentrancyGuard {
         uint256 fee = (actualTokenAmount * 3) / 1000;
         uint256 tokenAmountLessFee = actualTokenAmount - fee;
 
-        uint256 ethOut = (tokenAmountLessFee * pool.ethReserve) / (pool.tokenReserve + tokenAmountLessFee);
+        uint256 ethOut = (tokenAmountLessFee * pool.ethReserve) /
+            (pool.tokenReserve + tokenAmountLessFee);
         require(ethOut >= minEth, "Insufficient output amount");
 
         pool.tokenReserve += actualTokenAmount;
@@ -183,20 +201,27 @@ contract MinimalDEX is ReentrancyGuard {
 
         Pool storage poolIn = pools[tokenIn];
         Pool storage poolOut = pools[tokenOut];
-        require(poolIn.totalSupply > 0 && poolOut.totalSupply > 0, "Pool does not exist");
+        require(
+            poolIn.totalSupply > 0 && poolOut.totalSupply > 0,
+            "Pool does not exist"
+        );
 
         uint256 tokenBalanceBefore = IERC20(tokenIn).balanceOf(address(this));
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
-        uint256 actualTokenInAmount = IERC20(tokenIn).balanceOf(address(this)) - tokenBalanceBefore;
+        uint256 actualTokenInAmount = IERC20(tokenIn).balanceOf(address(this)) -
+            tokenBalanceBefore;
 
         uint256 feeIn = (actualTokenInAmount * 3) / 1000;
         uint256 tokenInAmountLessFee = actualTokenInAmount - feeIn;
 
-        uint256 ethAmount = (tokenInAmountLessFee * poolIn.ethReserve) / (poolIn.tokenReserve + tokenInAmountLessFee);
+        uint256 ethAmount = (tokenInAmountLessFee * poolIn.ethReserve) /
+            (poolIn.tokenReserve + tokenInAmountLessFee);
         poolIn.tokenReserve += actualTokenInAmount;
         poolIn.ethReserve -= ethAmount;
 
-        uint256 tokenOutAmount = ((ethAmount * (1000 - 3)) / 1000 * poolOut.tokenReserve) / (poolOut.ethReserve + ((ethAmount * (1000 - 3)) / 1000));
+        uint256 tokenOutAmount = (((ethAmount * (1000 - 3)) / 1000) *
+            poolOut.tokenReserve) /
+            (poolOut.ethReserve + ((ethAmount * (1000 - 3)) / 1000));
 
         require(tokenOutAmount >= minAmountOut, "Insufficient output amount");
 
@@ -205,8 +230,15 @@ contract MinimalDEX is ReentrancyGuard {
 
         IERC20(tokenOut).safeTransfer(msg.sender, tokenOutAmount);
 
-        emit TokenSwapped(msg.sender, tokenIn, tokenOut, actualTokenInAmount, tokenOutAmount);
+        emit TokenSwapped(
+            msg.sender,
+            tokenIn,
+            tokenOut,
+            actualTokenInAmount,
+            tokenOutAmount
+        );
     }
+
     function sqrt(uint256 y) internal pure returns (uint256 z) {
         if (y > 3) {
             z = y;

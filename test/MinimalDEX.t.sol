@@ -56,20 +56,42 @@ contract MinimalDEXTest is Test {
         dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
         vm.stopPrank();
 
-        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex.pools(address(tokenA));
+        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex
+            .pools(address(tokenA));
         assertEq(ethReserve, 100 ether);
         assertEq(tokenReserve, 100 ether);
         assertEq(totalSupply, sqrt(100 ether * 100 ether));
+    }
+
+    function testAddLiquidityWithDustAmounts() public {
+        uint256 ethAmount = 1; // 1 wei
+        uint256 tokenAmount = 2; // 2 wei
+
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), tokenAmount);
+        dex.addLiquidity{value: ethAmount}(address(tokenA), tokenAmount);
+        vm.stopPrank();
+
+        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex
+            .pools(address(tokenA));
+
+        assertEq(ethReserve, ethAmount, "ETH reserve mismatch");
+        assertEq(tokenReserve, tokenAmount, "Token reserve mismatch");
+        assertEq(totalSupply, 1); // Total supply should be floor(sqrt(1*2))
     }
 
     function testRemoveLiquidity() public {
         vm.startPrank(user1);
         tokenA.approve(address(dex), 100 ether);
         dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
-        dex.removeLiquidity(address(tokenA), dex.liquidityBalances(user1, address(tokenA)));
+        dex.removeLiquidity(
+            address(tokenA),
+            dex.liquidityBalances(user1, address(tokenA))
+        );
         vm.stopPrank();
 
-        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex.pools(address(tokenA));
+        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex
+            .pools(address(tokenA));
         assertEq(ethReserve, 0);
         assertEq(tokenReserve, 0);
         assertEq(totalSupply, 0);
@@ -81,16 +103,21 @@ contract MinimalDEXTest is Test {
         dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
         vm.stopPrank();
 
-        (uint256 currentEthReserve, uint256 currentTokenReserve, ) = dex.pools(address(tokenA));
+        (uint256 currentEthReserve, uint256 currentTokenReserve, ) = dex.pools(
+            address(tokenA)
+        );
         uint256 expectedFees = (10 ether * 3) / 1000;
         uint256 netEthDeposit = 10 ether - expectedFees;
-        uint256 expectedTokensOut = (netEthDeposit * currentTokenReserve) / (currentEthReserve + netEthDeposit);
+        uint256 expectedTokensOut = (netEthDeposit * currentTokenReserve) /
+            (currentEthReserve + netEthDeposit);
 
         vm.startPrank(user2);
         dex.swapEthForToken{value: 10 ether}(address(tokenA), 0);
         vm.stopPrank();
 
-        (uint256 actualEthReserve, uint256 actualTokenReserve, ) = dex.pools(address(tokenA));
+        (uint256 actualEthReserve, uint256 actualTokenReserve, ) = dex.pools(
+            address(tokenA)
+        );
 
         assertEq(actualEthReserve, currentEthReserve + 10 ether);
         assertEq(actualTokenReserve, currentTokenReserve - expectedTokensOut); // Adjusted for fees
@@ -102,18 +129,23 @@ contract MinimalDEXTest is Test {
         dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
         vm.stopPrank();
 
-        (uint256 currentEthReserve, uint256 currentTokenReserve, ) = dex.pools(address(tokenA));
+        (uint256 currentEthReserve, uint256 currentTokenReserve, ) = dex.pools(
+            address(tokenA)
+        );
         uint256 expectedFee = (10 ether * 3) / 1000;
         uint256 netTokenDeposit = 10 ether - expectedFee;
-        uint256 expectedEthOut = (currentEthReserve * netTokenDeposit) / (currentTokenReserve + netTokenDeposit);
+        uint256 expectedEthOut = (currentEthReserve * netTokenDeposit) /
+            (currentTokenReserve + netTokenDeposit);
 
         vm.startPrank(user2);
         tokenA.approve(address(dex), 10 ether);
         dex.swapTokenForEth(address(tokenA), 10 ether, 0);
         vm.stopPrank();
 
-        (uint256 actualEthReserve, uint256 actualTokenReserve, ) = dex.pools(address(tokenA));
-        assertEq(actualTokenReserve, currentTokenReserve + 10 ether); 
+        (uint256 actualEthReserve, uint256 actualTokenReserve, ) = dex.pools(
+            address(tokenA)
+        );
+        assertEq(actualTokenReserve, currentTokenReserve + 10 ether);
         assertEq(actualEthReserve, currentEthReserve - expectedEthOut); // Adjusted for fees
     }
 
@@ -125,21 +157,30 @@ contract MinimalDEXTest is Test {
         dex.addLiquidity{value: 100 ether}(address(tokenB), 100 ether);
         vm.stopPrank();
 
-        (uint256 currentEthReserveA, uint256 currentTokenReserveA, ) = dex.pools(address(tokenA));
-        (uint256 currentEthReserveB, uint256 currentTokenReserveB, ) = dex.pools(address(tokenB));
+        (uint256 currentEthReserveA, uint256 currentTokenReserveA, ) = dex
+            .pools(address(tokenA));
+        (uint256 currentEthReserveB, uint256 currentTokenReserveB, ) = dex
+            .pools(address(tokenB));
 
         uint256 expectedFeesIn = (10 ether * 3) / 1000;
-        uint256 expectedEthInAmount = ((10 ether - expectedFeesIn) * currentEthReserveA ) / (currentTokenReserveA + 10 ether - expectedFeesIn);
-        uint256 expectedTokensOut = ((expectedEthInAmount * (1000 - 3)) / 1000 * currentTokenReserveB) / (currentEthReserveB + ((expectedEthInAmount * (1000 - 3)) / 1000));
+        uint256 expectedEthInAmount = ((10 ether - expectedFeesIn) *
+            currentEthReserveA) /
+            (currentTokenReserveA + 10 ether - expectedFeesIn);
+        uint256 expectedTokensOut = (((expectedEthInAmount * (1000 - 3)) /
+            1000) * currentTokenReserveB) /
+            (currentEthReserveB + ((expectedEthInAmount * (1000 - 3)) / 1000));
 
         vm.startPrank(user2);
         tokenA.approve(address(dex), 10 ether);
         dex.swapTokenForToken(address(tokenA), address(tokenB), 10 ether, 0);
         vm.stopPrank();
 
-
-        (uint256 actualEthReserveA, uint256 actualTokenReserveA, ) = dex.pools(address(tokenA));
-        (uint256 actualEthReserveB, uint256 actualTokenReserveB, ) = dex.pools(address(tokenB));
+        (uint256 actualEthReserveA, uint256 actualTokenReserveA, ) = dex.pools(
+            address(tokenA)
+        );
+        (uint256 actualEthReserveB, uint256 actualTokenReserveB, ) = dex.pools(
+            address(tokenB)
+        );
 
         assertEq(actualEthReserveB, currentEthReserveB + expectedEthInAmount);
         assertEq(actualEthReserveA, currentEthReserveA - expectedEthInAmount);
@@ -158,15 +199,22 @@ contract MinimalDEXTest is Test {
         dex.addLiquidity{value: 50 ether}(address(tokenA), 50 ether);
         vm.stopPrank();
 
-        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex.pools(address(tokenA));
+        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex
+            .pools(address(tokenA));
         assertEq(ethReserve, 150 ether);
         assertEq(tokenReserve, 150 ether);
-        assertEq(totalSupply, sqrt(100 ether * 100 ether) + sqrt(50 ether * 50 ether));
+        assertEq(
+            totalSupply,
+            sqrt(100 ether * 100 ether) + sqrt(50 ether * 50 ether)
+        );
     }
 
     // Fuzzing Tests
 
-    function testFuzzAddLiquidity(uint256 ethAmount, uint256 tokenAmount) public {
+    function testFuzzAddLiquidity(
+        uint256 ethAmount,
+        uint256 tokenAmount
+    ) public {
         vm.assume(ethAmount > 0 && ethAmount <= 1000 ether);
         vm.assume(tokenAmount > 0 && tokenAmount <= 1000 ether);
 
@@ -175,7 +223,8 @@ contract MinimalDEXTest is Test {
         dex.addLiquidity{value: ethAmount}(address(tokenA), tokenAmount);
         vm.stopPrank();
 
-        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex.pools(address(tokenA));
+        (uint256 ethReserve, uint256 tokenReserve, uint256 totalSupply) = dex
+            .pools(address(tokenA));
         assertEq(ethReserve, ethAmount);
         assertEq(tokenReserve, tokenAmount);
         assertEq(totalSupply, sqrt(ethAmount * tokenAmount));
@@ -199,6 +248,50 @@ contract MinimalDEXTest is Test {
         vm.stopPrank();
     }
 
+    function testRevertAddLiquidityLessEthProvided() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 10 ether}(address(tokenA), 100 ether);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        tokenA.approve(address(dex), 100 ether);
+        vm.expectRevert("Insufficient liquidity minted");
+        dex.addLiquidity{value: 1}(address(tokenA), 1);
+        vm.stopPrank();
+    }
+
+    function testRevertAddLiquidityWhenExpectedLiquidityZero() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        tokenA.approve(address(dex), 100 ether);
+        vm.expectRevert("Insufficient ETH sent");
+        dex.addLiquidity{value: 10 ether}(address(tokenA), 100 ether);
+        vm.stopPrank();
+    }
+
+    function testRevertRemoveExtraLiquidity() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        vm.expectRevert("Insufficient liquidity");
+        dex.removeLiquidity(address(tokenA), 200 ether);
+        vm.stopPrank();
+    }
+
+    function testRevertRemoveZeroLiquidity() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        vm.expectRevert("Insufficient reserves");
+        dex.removeLiquidity(address(tokenA), 0);
+        vm.stopPrank();
+    }
+
     function testRevertSwapEthForTokenNoPool() public {
         vm.startPrank(user1);
         vm.expectRevert("Pool does not exist");
@@ -206,10 +299,82 @@ contract MinimalDEXTest is Test {
         vm.stopPrank();
     }
 
+    function testRevertSwapEthForTokenNoEth() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        vm.expectRevert("Must send ETH");
+        dex.swapEthForToken{value: 0}(address(tokenA), 10 ether);
+        vm.stopPrank();
+    }
+
+    function testRevertSwapEthForTokenMoreTokensExpected() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        vm.expectRevert("Insufficient output amount");
+        dex.swapEthForToken{value: 10 ether}(address(tokenA), 200 ether);
+        vm.stopPrank();
+    }
+
     function testRevertSwapTokenForEthNoPool() public {
         vm.startPrank(user1);
         vm.expectRevert("Pool does not exist");
         dex.swapTokenForEth(address(tokenA), 10 ether, 0);
+        vm.stopPrank();
+    }
+
+    function testRevertSwapTokenForEthMoreEthExpected() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        tokenA.approve(address(dex), 10 ether);
+        vm.expectRevert("Insufficient output amount");
+        dex.swapTokenForEth(address(tokenA), 10 ether, 20 ether);
+        vm.stopPrank();
+    }
+
+    function testRevertSwapTokenForTokenSameToken() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        tokenB.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenB), 100 ether);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        tokenA.approve(address(dex), 10 ether);
+        vm.expectRevert("Same token");
+        dex.swapTokenForToken(address(tokenA), address(tokenA), 10 ether, 0);
+        vm.stopPrank();
+    }
+
+    function testRevertSwapTokenForTokenMoreTokensExpected() public {
+        vm.startPrank(user1);
+        tokenA.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenA), 100 ether);
+        tokenB.approve(address(dex), 100 ether);
+        dex.addLiquidity{value: 100 ether}(address(tokenB), 100 ether);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        tokenA.approve(address(dex), 10 ether);
+        vm.expectRevert("Insufficient output amount");
+        dex.swapTokenForToken(
+            address(tokenA),
+            address(tokenB),
+            10 ether,
+            20 ether
+        );
         vm.stopPrank();
     }
 

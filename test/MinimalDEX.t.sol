@@ -19,9 +19,10 @@ contract MinimalDEXTest is Test {
     MockERC20 tokenB;
     address user1 = address(0x1);
     address user2 = address(0x2);
+    uint256 fee = 3; // 0.3% 
 
     function setUp() public {
-        dex = new MinimalDEX();
+        dex = new MinimalDEX(fee);
         tokenA = new MockERC20("TokenA", "TA");
         tokenB = new MockERC20("TokenB", "TB");
 

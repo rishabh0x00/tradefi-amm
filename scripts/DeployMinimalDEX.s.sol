@@ -8,8 +8,10 @@ contract DeployMinimalDEX is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
+
+        uint256 fee = vm.envUint("FEE");
         
-        MinimalDEX dex = new MinimalDEX();
+        MinimalDEX dex = new MinimalDEX(fee);
         
         vm.stopBroadcast();
     }
